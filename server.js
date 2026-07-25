@@ -1855,6 +1855,26 @@ app.post("/api/draw/guess", async function(request, reply) {
   saveDrawGame(game);
   return { ok: true, correct: isCorrect, message: isCorrect ? "猜对了！🎉" : "没猜中再想想～", attempts: game.guesses.length };
 });
+app.get("/api/draw/demo", async function(request, reply) {
+  const strokes = [
+    { points: [[500,170],[585,190],[650,260],[670,350],[650,440],[585,510],[500,530],[415,510],[350,440],[330,350],[350,260],[415,190],[500,170]], color: "#4f454b", width: 8 },
+    { points: [[380,220],[350,100],[450,170]], color: "#4f454b", width: 8 },
+    { points: [[620,220],[650,100],[550,170]], color: "#4f454b", width: 8 },
+    { points: [[440,320],[455,310],[470,320]], color: "#4f454b", width: 6 },
+    { points: [[530,320],[545,310],[560,320]], color: "#4f454b", width: 6 },
+    { points: [[500,390],[500,390]], color: "#e8877c", width: 10 },
+    { points: [[470,420],[500,440],[530,420]], color: "#4f454b", width: 5 },
+    { points: [[400,370],[280,350]], color: "#4f454b", width: 3 },
+    { points: [[400,390],[280,390]], color: "#4f454b", width: 3 },
+    { points: [[600,370],[720,350]], color: "#4f454b", width: 3 },
+    { points: [[600,390],[720,390]], color: "#4f454b", width: 3 }
+  ];
+  const drawingSvg = strokesToSvg(strokes);
+  const asciiGrid = makeAsciiGrid(strokes);
+  saveDrawGame({ answer: "小猫", aliases: ["猫咪","kitty","cat","小猫咪"], strokes, drawing_svg: drawingSvg, ascii_grid: asciiGrid, created_at: new Date().toISOString(), artist: "AI", guesses: [], revealed: false });
+  reply.redirect("/api/draw/play");
+});
+
 
 app.get("/api/draw/play", async function(request, reply) {
   const game = loadDrawGame();
