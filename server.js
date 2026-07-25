@@ -1711,7 +1711,58 @@ app.get("/test-bark", async (req, reply) => {
   appendSpecialEvent(`（${formattedTime} 刚刚给用户发了 Bark：这是一条测试推送。）`);
   reply.send({ success: true });
 });
+// === 屏幕时间追踪 ===
+const SCREENTIME_FILE = path.join(__dirname, "screentime.json");
 
+function loadScreentime() {
+  try {
+    return JSON.parse(fs.readFileSync(SCREENTIME_FILE, "utf-8"));
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveScreentime(data) {
+  fs.writeFileSync(SCREENTIME_FILE, JSON.stringify(data, null, 2));
+}
+
+function cleanOldRecords(data) {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const appName in data) {
+    data[appName].log = data[appName].log.filter(function(e) { return e.t > cutoff; });
+    if (data[appName].log.length === 0) delete data[appName];
+  }
+}
+
+app.get("/api/screentime/toggle/:appName", async function(request, reply) {
+  const appName = decodeURIComponent(request.params.appName);
+  const now = Date.now();
+  const data = loadScreentime();
+
+  if (!data[appName]) {
+    data[appName] = { status: "open", log: [] };
+  }
+
+  const appData = data[appName];
+  if (appData.status === "open") {
+    appData.log.push({ t: now, type: "close" });
+    appData.status = "close";
+  } else {
+    appData.log.push({ t: now, type: "open" });
+    appData.status = "open";
+  }
+
+  cleanOldRecords(data);
+  saveScreentime(data);
+  return { ok: true, app: appName, status: appData.status };
+});
+
+app.get("/api/screentime/query", async function(request, reply) {
+  const data = loadScreentime();
+  cleanOldRecords(data);
+  saveScreentime(data);
+  return data;
+});
 // ========================
 // 启动服务
 // ========================
