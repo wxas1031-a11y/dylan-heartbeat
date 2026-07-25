@@ -1764,6 +1764,119 @@ app.get("/api/screentime/query", async function(request, reply) {
   saveScreentime(data);
   return data;
 });
+// === 你画我猜工具函数 ===
+function svgEscape(value) {
+  return String(value ?? "").replace(/[<>"'&]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
+}
+
+function normalizePointPairs(points) {
+  if (!Array.isArray(points)) return [];
+  if (points.every(n => typeof n === "number")) {
+    const out = [];
+    for (let i = 0; i < points.length - 1; i += 2) out.push([points[i], points[i + 1]]);
+    return out;
+  }
+  return points.filter(p => Array.isArray(p) && p.length >= 2).map(p => [Number(p[0]), Number(p[1])]).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+}
+
+function strokesToSvg(strokes, width = 1000, height = 700) {
+  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">`,`<rect width="${width}" height="${height}" rx="20" fill="#fffafc"/>`];
+  for (const stroke of strokes.slice(0, 80)) {
+    const points = normalizePointPairs(stroke.points);
+    if (!points.length) continue;
+    const d = points.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+    const color = svgEscape(stroke.color || "#4f454b");
+    const lineWidth = Math.max(1, Math.min(28, Number(stroke.width || 7)));
+    parts.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="${lineWidth}" stroke-linecap="round" stroke-linejoin="round"/>`);
+  }
+  parts.push("</svg>");
+  return parts.join("");
+}
+
+function makeAsciiGrid(strokes, width = 1000, height = 700, cols = 60, rows = 42) {
+  const grid = Array.from({ length: rows }, () => Array(cols).fill("."));
+  function mark(x, y) {
+    const col = Math.max(0, Math.min(cols - 1, Math.floor((x / width) * cols)));
+    const row = Math.max(0, Math.min(rows - 1, Math.floor((y / height) * rows)));
+    grid[row][col] = "#";
+  }
+  for (const stroke of strokes) {
+    const points = normalizePointPairs(stroke.points);
+    for (let i = 1; i < points.length; i++) {
+      const [x1, y1] = points[i - 1];
+      const [x2, y2] = points[i];
+      const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 8));
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        mark(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
+      }
+    }
+  }
+  return grid.map(row => row.join("")).join("\n");
+}
+
+// === 你画我猜游戏 ===
+const DRAW_FILE = path.join(__dirname, "draw_game.json");
+
+function loadDrawGame() {
+  try { return JSON.parse(fs.readFileSync(DRAW_FILE, "utf-8")); } catch { return null; }
+}
+
+function saveDrawGame(data) {
+  fs.writeFileSync(DRAW_FILE, JSON.stringify(data, null, 2));
+}
+
+app.post("/api/draw/start", async function(request, reply) {
+  const { answer, strokes, aliases } = request.body || {};
+  if (!answer || !strokes) return reply.code(400).send({ error: "answer 和 strokes 必填" });
+  const drawingSvg = strokesToSvg(strokes);
+  const asciiGrid = makeAsciiGrid(strokes);
+  saveDrawGame({ answer, aliases: aliases || [], strokes, drawing_svg: drawingSvg, ascii_grid: asciiGrid, created_at: new Date().toISOString(), artist: "AI", guesses: [], revealed: false });
+  return { ok: true, message: "画作已提交！去 /api/draw/play 看看吧" };
+});
+
+app.get("/api/draw/status", async function(request, reply) {
+  const game = loadDrawGame();
+  if (!game) return { ok: false, current: null, message: "还没有画作" };
+  return { ok: true, current: { canvas: "1000x700", artist: game.artist, created_at: game.created_at, drawing_svg: game.drawing_svg, ascii_grid: game.ascii_grid, ascii_grid_note: "60列x42行，#=线条，.=空白" } };
+});
+
+app.post("/api/draw/guess", async function(request, reply) {
+  const { guess } = request.body || {};
+  if (!guess) return reply.code(400).send({ error: "guess 必填" });
+  const game = loadDrawGame();
+  if (!game) return { ok: false, message: "还没有画作" };
+  if (game.revealed) return { ok: false, message: "这题已经结束了" };
+  const normalizedGuess = guess.trim().toLowerCase();
+  const allAnswers = [game.answer, ...game.aliases].map(a => a.trim().toLowerCase());
+  const isCorrect = allAnswers.includes(normalizedGuess);
+  game.guesses.push({ guess, correct: isCorrect, time: new Date().toISOString() });
+  if (isCorrect) game.revealed = true;
+  saveDrawGame(game);
+  return { ok: true, correct: isCorrect, message: isCorrect ? "猜对了！🎉" : "没猜中再想想～", attempts: game.guesses.length };
+});
+
+app.get("/api/draw/play", async function(request, reply) {
+  const game = loadDrawGame();
+  const hasGame = !!game;
+  const svgContent = hasGame && !game.revealed ? game.drawing_svg : "";
+  const revealed = hasGame ? game.revealed : false;
+  const answer = hasGame && revealed ? game.answer : "";
+  reply.type("text/html").send(`<!DOCTYPE html>
+<html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>你画我猜</title>
+<style>body{font-family:-apple-system,sans-serif;background:#f8f0f3;display:flex;justify-content:center;padding:40px 20px}.container{max-width:700px;width:100%;background:white;border-radius:20px;padding:30px;box-shadow:0 10px 30px rgba(180,120,130,0.15)}h2{color:#8a4a58;text-align:center}.canvas{border:2px solid #e8d0d8;border-radius:12px;overflow:hidden;margin:20px 0;background:#fffafc}.canvas svg{width:100%;height:auto;display:block}.guess-area{display:flex;gap:10px;margin-bottom:16px}input{flex:1;padding:12px 16px;border:1px solid #e0c8d0;border-radius:10px;font-size:16px}button{padding:12px 24px;background:#d8a0ad;color:white;border:none;border-radius:10px;font-size:16px;cursor:pointer}button:hover{background:#c8909d}.msg{padding:12px;border-radius:10px;margin-top:10px}.correct{background:#e8f5e9;color:#2e7d32}.wrong{background:#fbe9e7;color:#c62828}.empty{text-align:center;color:#a88a92;padding:40px}.answer{text-align:center;font-size:24px;color:#8a4a58;margin:20px 0}</style></head>
+<body><div class="container">
+<h2>你画我猜</h2>
+${!hasGame ? `<div class="empty">还没有画作，让AI画一个吧</div>` : revealed ? `<div class="answer">答案是：${answer}</div>` :
+`<div class="canvas">${svgContent}</div>
+<div class="guess-area"><input id="guessInput" placeholder="猜猜这是什么" onkeydown="if(event.key==='Enter')guess()"><button onclick="guess()">猜</button></div>
+<div id="result"></div>`}
+</div>
+<script>
+async function guess(){const i=document.getElementById("guessInput"),v=i.value.trim();if(!v)return;const r=await fetch("/api/draw/guess",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guess:v})}),d=await r.json();document.getElementById("result").innerHTML='<div class="msg '+(d.correct?"correct":"wrong")+'">'+d.message+"</div>";if(d.correct)setTimeout(()=>location.reload(),2000);i.value=""}
+</script></body></html>`);
+});
+
 // ========================
 // 启动服务
 // ========================
