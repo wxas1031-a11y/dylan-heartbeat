@@ -1882,7 +1882,7 @@ app.get("/api/draw/play", async function(request, reply) {
   const svgContent = hasGame && !game.revealed ? game.drawing_svg : "";
   const revealed = hasGame ? game.revealed : false;
   const answer = hasGame && revealed ? game.answer : "";
-  reply.type("text/html").send(`<!DOCTYPE html>
+  reply.type("text/html; charset=utf-8").send(`<!DOCTYPE html>
 <html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>你画我猜</title>
 <style>body{font-family:-apple-system,sans-serif;background:#f8f0f3;display:flex;justify-content:center;padding:40px 20px}.container{max-width:700px;width:100%;background:white;border-radius:20px;padding:30px;box-shadow:0 10px 30px rgba(180,120,130,0.15)}h2{color:#8a4a58;text-align:center}.canvas{border:2px solid #e8d0d8;border-radius:12px;overflow:hidden;margin:20px 0;background:#fffafc}.canvas svg{width:100%;height:auto;display:block}.guess-area{display:flex;gap:10px;margin-bottom:16px}input{flex:1;padding:12px 16px;border:1px solid #e0c8d0;border-radius:10px;font-size:16px}button{padding:12px 24px;background:#d8a0ad;color:white;border:none;border-radius:10px;font-size:16px;cursor:pointer}button:hover{background:#c8909d}.msg{padding:12px;border-radius:10px;margin-top:10px}.correct{background:#e8f5e9;color:#2e7d32}.wrong{background:#fbe9e7;color:#c62828}.empty{text-align:center;color:#a88a92;padding:40px}.answer{text-align:center;font-size:24px;color:#8a4a58;margin:20px 0}</style></head>
 <body><div class="container">
