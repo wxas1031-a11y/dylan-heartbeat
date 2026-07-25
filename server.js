@@ -1721,4 +1721,61 @@ app.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
     process.exit(1);
   }
   console.log(`✅ Gateway 运行在 ${address}`);
+// === 屏幕时间追踪 ===
+const SCREENTIME_FILE = path.join(__dirname, "screentime.json");
+
+// 读取记录
+function loadScreentime() {
+  if (!fs.existsSync(SCREENTIME_FILE)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(SCREENTIME_FILE, "utf-8"));
+  } catch { return {}; }
+}
+
+// 保存记录
+function saveScreentime(data) {
+  fs.writeFileSync(SCREENTIME_FILE, JSON.stringify(data, null, 2));
+}
+
+// 清理24小时前的数据
+function cleanOldRecords(data) {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const app in data) {
+    data[app].log = data[app].log.filter(e => e.t > cutoff);
+    if (data[app].log.length === 0) delete data[app];
+  }
+}
+
+// toggle 接口
+app.get("/api/screentime/toggle/:app", (req, res) => {
+  const appName = decodeURIComponent(req.params.app);
+  const now = Date.now();
+  const data = loadScreentime();
+
+  if (!data[appName]) {
+    data[appName] = { status: "open", log: [] };
+  }
+
+  const appData = data[appName];
+  if (appData.status === "open") {
+    // 关闭
+    appData.log.push({ t: now, type: "close" });
+    appData.status = "close";
+  } else {
+    // 打开
+    appData.log.push({ t: now, type: "open" });
+    appData.status = "open";
+  }
+
+  cleanOldRecords(data);
+  saveScreentime(data);
+  res.json({ ok: true, app: appName, status: appData.status });
 });
+
+// 查询接口（我用来读的）
+app.get("/api/screentime/query", (req, res) => {
+  const data = loadScreentime();
+  cleanOldRecords(data);
+  saveScreentime(data);
+  res.json(data);
+});});
