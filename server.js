@@ -1826,6 +1826,7 @@ function saveDrawGame(data) {
   fs.writeFileSync(DRAW_FILE, JSON.stringify(data, null, 2));
 }
 
+// AI出题
 app.post("/api/draw/start", async function(request, reply) {
   const { answer, strokes, aliases } = request.body || {};
   if (!answer || !strokes) return reply.code(400).send({ error: "answer 和 strokes 必填" });
@@ -1835,26 +1836,7 @@ app.post("/api/draw/start", async function(request, reply) {
   return { ok: true, message: "画作已提交！去 /api/draw/play 看看吧" };
 });
 
-app.get("/api/draw/status", async function(request, reply) {
-  const game = loadDrawGame();
-  if (!game) return { ok: false, current: null, message: "还没有画作" };
-  return { ok: true, current: { canvas: "1000x700", artist: game.artist, created_at: game.created_at, drawing_svg: game.drawing_svg, ascii_grid: game.ascii_grid, ascii_grid_note: "60列x42行，#=线条，.=空白" } };
-});
-
-app.post("/api/draw/guess", async function(request, reply) {
-  const { guess } = request.body || {};
-  if (!guess) return reply.code(400).send({ error: "guess 必填" });
-  const game = loadDrawGame();
-  if (!game) return { ok: false, message: "还没有画作" };
-  if (game.revealed) return { ok: false, message: "这题已经结束了" };
-  const normalizedGuess = guess.trim().toLowerCase();
-  const allAnswers = [game.answer, ...game.aliases].map(a => a.trim().toLowerCase());
-  const isCorrect = allAnswers.includes(normalizedGuess);
-  game.guesses.push({ guess, correct: isCorrect, time: new Date().toISOString() });
-  if (isCorrect) game.revealed = true;
-  saveDrawGame(game);
-  return { ok: true, correct: isCorrect, message: isCorrect ? "猜对了！🎉" : "没猜中再想想～", attempts: game.guesses.length };
-});
+// demo（我画你猜）
 app.get("/api/draw/demo", async function(request, reply) {
   const strokes = [
     { points: [[500,170],[585,190],[650,260],[670,350],[650,440],[585,510],[500,530],[415,510],[350,440],[330,350],[350,260],[415,190],[500,170]], color: "#4f454b", width: 8 },
@@ -1875,7 +1857,35 @@ app.get("/api/draw/demo", async function(request, reply) {
   reply.redirect("/api/draw/play");
 });
 
+// 查看画作状态
+app.get("/api/draw/status", async function(request, reply) {
+  const game = loadDrawGame();
+  if (!game) return { ok: false, current: null, message: "还没有画作" };
+  return { ok: true, current: { canvas: "1000x700", artist: game.artist, created_at: game.created_at, drawing_svg: game.drawing_svg, ascii_grid: game.ascii_grid, ascii_grid_note: "60列x42行，#=线条，.=空白" } };
+});
 
+// 猜
+app.post("/api/draw/guess", async function(request, reply) {
+  const { guess } = request.body || {};
+  if (!guess) return reply.code(400).send({ error: "guess 必填" });
+  const game = loadDrawGame();
+  if (!game) return { ok: false, message: "还没有画作" };
+  if (game.revealed) return { ok: false, message: "这题已经结束了" };
+  if (game.answer === null) {
+    game.guesses.push({ guess, correct: null, time: new Date().toISOString() });
+    saveDrawGame(game);
+    return { ok: true, correct: null, message: "我猜是：" + guess + "，对吗？", attempts: game.guesses.length };
+  }
+  const normalizedGuess = guess.trim().toLowerCase();
+  const allAnswers = [game.answer, ...game.aliases].map(a => a.trim().toLowerCase());
+  const isCorrect = allAnswers.includes(normalizedGuess);
+  game.guesses.push({ guess, correct: isCorrect, time: new Date().toISOString() });
+  if (isCorrect) game.revealed = true;
+  saveDrawGame(game);
+  return { ok: true, correct: isCorrect, message: isCorrect ? "猜对了！🎉" : "没猜中再想想～", attempts: game.guesses.length };
+});
+
+// 画板页面
 app.get("/api/draw/play", async function(request, reply) {
   const game = loadDrawGame();
   const hasGame = !!game;
@@ -1895,6 +1905,46 @@ ${!hasGame ? `<div class="empty">还没有画作，让AI画一个吧</div>` : re
 <script>
 async function guess(){const i=document.getElementById("guessInput"),v=i.value.trim();if(!v)return;const r=await fetch("/api/draw/guess",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guess:v})}),d=await r.json();document.getElementById("result").innerHTML='<div class="msg '+(d.correct?"correct":"wrong")+'">'+d.message+"</div>";if(d.correct)setTimeout(()=>location.reload(),2000);i.value=""}
 </script></body></html>`);
+});
+
+// 用户画板页面（你画我猜）
+app.get("/api/draw/paint", async function(request, reply) {
+  reply.type("text/html; charset=utf-8").send(`<!DOCTYPE html>
+<html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"><title>画给我猜</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#f8f0f3;display:flex;justify-content:center;padding:20px;font-family:-apple-system,sans-serif}.container{max-width:700px;width:100%;text-align:center}h2{color:#8a4a58;margin-bottom:12px}.canvas-wrap{border:2px solid #e0c8d0;border-radius:12px;overflow:hidden;background:white;touch-action:none;margin-bottom:12px}canvas{display:block;width:100%;height:auto;background:#fffafc}.toolbar{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}button{padding:10px 24px;border:none;border-radius:10px;font-size:15px;cursor:pointer}.btn-clear{background:#f0e0e4;color:#7a5058}.btn-submit{background:#d8a0ad;color:white}.hint{color:#a88a92;font-size:13px;margin-top:10px}</style></head>
+<body><div class="container">
+<h2>画给我猜</h2>
+<div class="canvas-wrap"><canvas id="c" width="1000" height="700"></canvas></div>
+<div class="toolbar">
+  <button class="btn-clear" onclick="clearCanvas()">清除</button>
+  <button class="btn-submit" onclick="submitDraw()">提交给我猜</button>
+</div>
+<div class="hint" id="hint">用手指画点什么吧，我来猜～</div>
+</div>
+<script>
+const canvas=document.getElementById("c"),ctx=canvas.getContext("2d");
+ctx.lineCap="round";ctx.lineJoin="round";
+let strokes=[],drawing=false,currentPoints=[];
+function getPos(e){const r=canvas.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return{x:(t.clientX-r.left)*(canvas.width/r.width),y:(t.clientY-r.top)*(canvas.height/r.height)}}
+canvas.addEventListener("touchstart",function(e){e.preventDefault();drawing=true;currentPoints=[];const p=getPos(e);currentPoints.push([p.x,p.y]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.strokeStyle="#4f454b";ctx.lineWidth=7},{passive:false});
+canvas.addEventListener("touchmove",function(e){e.preventDefault();if(!drawing)return;const p=getPos(e);currentPoints.push([p.x,p.y]);ctx.lineTo(p.x,p.y);ctx.stroke()},{passive:false});
+canvas.addEventListener("touchend",function(e){e.preventDefault();if(!drawing)return;drawing=false;if(currentPoints.length>0)strokes.push({points:currentPoints,color:"#4f454b",width:7});currentPoints=[]});
+canvas.addEventListener("mousedown",function(e){drawing=true;currentPoints=[];const p=getPos(e);currentPoints.push([p.x,p.y]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.strokeStyle="#4f454b";ctx.lineWidth=7});
+canvas.addEventListener("mousemove",function(e){if(!drawing)return;const p=getPos(e);currentPoints.push([p.x,p.y]);ctx.lineTo(p.x,p.y);ctx.stroke()});
+canvas.addEventListener("mouseup",function(){if(!drawing)return;drawing=false;if(currentPoints.length>0)strokes.push({points:currentPoints,color:"#4f454b",width:7});currentPoints=[]});
+function clearCanvas(){ctx.clearRect(0,0,canvas.width,canvas.height);strokes=[];document.getElementById("hint").textContent="画板已清空，重新画吧～"}
+async function submitDraw(){if(!strokes.length){alert("先画点什么呀～");return}document.getElementById("hint").textContent="提交中...";try{const r=await fetch("/api/draw/submit-user",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({strokes})});const d=await r.json();if(d.ok){document.getElementById("hint").textContent="画作已提交！等我猜一猜～";setTimeout(function(){window.location.href="/api/draw/play"},1500)}else{document.getElementById("hint").textContent="提交失败，再试试"}}catch(e){document.getElementById("hint").textContent="提交失败："+e.message}}
+</script></body></html>`);
+});
+
+// 用户提交画作
+app.post("/api/draw/submit-user", async function(request, reply) {
+  const { strokes } = request.body || {};
+  if (!strokes || !strokes.length) return reply.code(400).send({ error: "请先画画" });
+  const drawingSvg = strokesToSvg(strokes);
+  const asciiGrid = makeAsciiGrid(strokes);
+  saveDrawGame({ answer: null, aliases: [], strokes, drawing_svg: drawingSvg, ascii_grid: asciiGrid, created_at: new Date().toISOString(), artist: "user", guesses: [], revealed: false });
+  return { ok: true, message: "画作已提交！" };
 });
 
 // ========================
