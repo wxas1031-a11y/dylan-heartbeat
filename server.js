@@ -1765,7 +1765,6 @@ app.get("/api/screentime/query", async function(request, reply) {
   return data;
 });
 
-
 // ========================
 // 启动服务
 // ========================
