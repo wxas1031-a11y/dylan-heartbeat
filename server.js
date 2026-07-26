@@ -1967,7 +1967,7 @@ setInterval(() => {
 // ========================
 // MCP 协议入口（你画我猜）
 // ========================
-app.post("/mcp/draw", async (req, reply) => {
+app.all("/mcp/draw", async (req, reply) => {
   const { tool, params } = req.body || {};
   
   if (tool === "draw_start") {
