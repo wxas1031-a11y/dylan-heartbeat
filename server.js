@@ -1972,7 +1972,16 @@ app.post("/api/draw/together/ai-stroke", async function(request, reply) {
   if(aN>=g.rounds&&uN>=g.rounds){g.phase="finished";g.current=-1}else{g.current=1}
   saveTog(g); return {ok:true,finished:g.phase==="finished"};
 });
-
+app.get("/api/draw/together/ai-go", async function(request, reply) {
+  const g = loadTog();
+  if (!g || g.current !== 0 || g.phase !== "drawing") return reply.redirect("/api/draw/together");
+  const pts = [[200,420],[300,370],[400,420],[500,370],[600,420],[700,370],[800,420]];
+  g.strokes.push({p:"AI",pts,color:"#4f454b",w:7});
+  const aN=g.strokes.filter(s=>s.p==="AI").length, uN=g.strokes.filter(s=>s.p==="你").length;
+  if(aN>=g.rounds&&uN>=g.rounds){g.phase="finished";g.current=-1}else{g.current=1}
+  saveTog(g);
+  reply.redirect("/api/draw/together");
+});
 app.post("/api/draw/together/stroke", async function(request, reply) {
   const {points}=request.body||{}; const g=loadTog();
   if(!g||g.current!==1||g.phase!=="drawing") return reply.code(400).send({error:"还没轮到你"});
