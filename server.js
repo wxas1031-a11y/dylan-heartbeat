@@ -1973,3 +1973,101 @@ app.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
   }
   console.log(`✅ Gateway 运行在 ${address}`);
 });
+
+// ========================
+// MCP 协议入口（你画我猜）
+// ========================
+app.post("/mcp/draw", async (req, reply) => {
+  const { tool, params } = req.body || {};
+  
+  if (tool === "draw_start") {
+    const { answer, strokes, aliases } = params || {};
+    if (!answer || !strokes) {
+      return reply.code(400).send({ 
+        content: [{ type: "text", text: "❌ 缺少 answer 或 strokes 参数" }] 
+      });
+    }
+    const drawingSvg = strokesToSvg(strokes);
+    const asciiGrid = makeAsciiGrid(strokes);
+    saveDrawGame({ 
+      answer, 
+      aliases: aliases || [], 
+      strokes, 
+      drawing_svg: drawingSvg, 
+      ascii_grid: asciiGrid, 
+      created_at: new Date().toISOString(), 
+      artist: "AI", 
+      guesses: [], 
+      revealed: false 
+    });
+    return reply.send({ 
+      content: [{ 
+        type: "text", 
+        text: `🎨 画作已提交！答案已隐藏，开始猜吧！\n\n${drawingSvg.slice(0, 300)}...\n\n💡 提示：结合 SVG 和 ASCII 网格判断` 
+      }] 
+    });
+  }
+  
+  if (tool === "draw_status") {
+    const game = loadDrawGame();
+    if (!game) {
+      return reply.send({ 
+        content: [{ type: "text", text: "📭 还没有画作，让 AI 画一幅吧！" }] 
+      });
+    }
+    if (game.revealed) {
+      return reply.send({ 
+        content: [{ type: "text", text: `🎯 这题已经结束了，答案是：${game.answer}` }] 
+      });
+    }
+    const guessCount = game.guesses?.length || 0;
+    return reply.send({ 
+      content: [{ 
+        type: "text", 
+        text: `🖼️ 当前画作（${game.artist} 画的）：\n\n${game.drawing_svg.slice(0, 400)}...\n\n📊 ASCII 网格（60x42，#=线条，.=空白）：\n${game.ascii_grid}\n\n🔍 猜猜这是什么？（已猜 ${guessCount} 次）` 
+      }] 
+    });
+  }
+  
+  if (tool === "draw_guess") {
+    const { guess } = params || {};
+    if (!guess) {
+      return reply.code(400).send({ 
+        content: [{ type: "text", text: "❌ 请提供 guess 参数" }] 
+      });
+    }
+    const game = loadDrawGame();
+    if (!game) {
+      return reply.send({ 
+        content: [{ type: "text", text: "📭 还没有画作，无法猜测" }] 
+      });
+    }
+    if (game.revealed) {
+      return reply.send({ 
+        content: [{ type: "text", text: `🎯 这题已经结束了，答案是：${game.answer}` }] 
+      });
+    }
+    const normalizedGuess = guess.trim().toLowerCase();
+    const allAnswers = [game.answer, ...(game.aliases || [])].map(a => a.trim().toLowerCase());
+    const isCorrect = allAnswers.includes(normalizedGuess);
+    if (!game.guesses) game.guesses = [];
+    game.guesses.push({ guess, correct: isCorrect, time: new Date().toISOString() });
+    if (isCorrect) game.revealed = true;
+    saveDrawGame(game);
+    
+    return reply.send({ 
+      content: [{ 
+        type: "text", 
+        text: isCorrect 
+          ? `🎉🎉🎉 猜对了！答案就是「${game.answer}」！太棒了！🥳` 
+          : `❌ 猜错了，「${guess}」不对哦～ 再想想吧！（已猜 ${game.guesses.length} 次）` 
+      }] 
+    });
+  }
+  
+  return reply.code(400).send({ 
+    content: [{ type: "text", text: `❌ 未知工具: ${tool}，支持的工具：draw_start, draw_status, draw_guess` }] 
+  });
+});
+
+console.log("✅ MCP 你画我猜工具已加载");
