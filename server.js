@@ -501,21 +501,7 @@ app.addHook("onRequest", (req, reply, done) => {
   if (req.url.startsWith("/api/")) return done ();
   // 批注 2026-07-15：公网部署常经过反代，真实公网请求可能在 Node 侧显示为 127/10 网段；
   // 所以 ALLOW_PUBLIC_API=true 后必须先验 /v1 的网关 key，避免被云平台内网 IP 绕过。
-  /*
-  if (readBooleanEnv("ALLOW_PUBLIC_API", false) && req.url.startsWith("/v1/")) {
-    const configuredKey = readEnvValue("GATEWAY_API_KEY");
-    if (!configuredKey) {
-      reply.code(401).send({ error: "公网 /v1 已开启，但 GATEWAY_API_KEY 未配置" });
-      return;
-    }
-    const auth = String(req.headers.authorization || "");
-    const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
-    const headerKey = String(req.headers["x-gateway-api-key"] || req.headers["x-api-key"] || "").trim();
-    if (bearer === configuredKey || headerKey === configuredKey) return done();
-    reply.code(401).send({ error: "Gateway API Key 无效或缺失" });
-    return;
-  }
-  */
+  
   const ip = req.ip || req.connection.remoteAddress;
   const isTrustedNetwork = ip === "127.0.0.1" || ip === "::1" || ip === "localhost" || /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(ip);
   if (isTrustedNetwork) return done();
