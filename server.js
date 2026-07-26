@@ -1967,7 +1967,7 @@ app.post("/api/draw/together/ai-stroke", async function(request, reply) {
   const {points,color,width}=request.body||{}; const g=loadTog();
   if(!g||g.current!==0||g.phase!=="drawing") return reply.code(400).send({error:"还没轮到AI"});
   if(!points||points.length<2) return reply.code(400).send({error:"至少两个点"});
-  g.strokes.push({p:"AI",pts:points,c:color||"#4f454b",w:width||7});
+  g.strokes.push({p:"AI",pts:points,c:color||"#4f454b",w:width||7});7
   const aN=g.strokes.filter(s=>s.p==="AI").length, uN=g.strokes.filter(s=>s.p==="你").length;
   if(aN>=g.rounds&&uN>=g.rounds){g.phase="finished";g.current=-1}else{g.current=1}
   saveTog(g); return {ok:true,finished:g.phase==="finished"};
@@ -1975,7 +1975,21 @@ app.post("/api/draw/together/ai-stroke", async function(request, reply) {
 app.get("/api/draw/together/ai-go", async function(request, reply) {
   const g = loadTog();
   if (!g || g.current !== 0 || g.phase !== "drawing") return reply.redirect("/api/draw/together");
-  const pts = [[200,420],[300,370],[400,420],[500,370],[600,420],[700,370],[800,420]];
+  const type = request.query.type || "wave";
+  let pts;
+  if (type === "cloud") {
+    pts = [[560,180],[590,160],[630,155],[670,160],[700,175],[720,200],[710,225],[680,240],[640,245],[600,240],[570,225],[555,205],[560,180]];
+  } else if (type === "sun") {
+    pts = [[150,130],[170,100],[200,85],[230,100],[250,130],[230,155],[200,170],[170,155],[150,130]];
+  } else if (type === "tree") {
+    pts = [[550,370],[550,310],[530,280],[550,260],[570,280],[550,310]];
+  } else if (type === "bird") {
+    pts = [[400,120],[410,115],[420,120],[430,115],[440,120]];
+  } else if (type === "flower") {
+    pts = [[350,370],[350,330],[340,310],[350,300],[360,310],[350,330]];
+  } else {
+    pts = [[200,420],[300,370],[400,420],[500,370],[600,420],[700,370],[800,420]];
+  }
   g.strokes.push({p:"AI",pts,color:"#4f454b",w:7});
   const aN=g.strokes.filter(s=>s.p==="AI").length, uN=g.strokes.filter(s=>s.p==="你").length;
   if(aN>=g.rounds&&uN>=g.rounds){g.phase="finished";g.current=-1}else{g.current=1}
