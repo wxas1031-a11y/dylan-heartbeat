@@ -2045,14 +2045,15 @@ app.post("/mcp/draw", async (req, reply) => {
     if (isCorrect) game.revealed = true;
     saveDrawGame(game);
     
-    return reply.send({ 
-      content: [{ 
-        type: "text", 
-        text: isCorrect 
-          ? `🎉🎉🎉 猜对了！答案就是「${game.answer}」！太棒了！🥳` 
-          : `❌ 猜错了，「${guess}」不对哦～ 再想想吧！（已猜 ${game.guesses.length} 次）` 
-      }] 
-    });
+  
+return reply.send({
+  content: [{ 
+    type: "text", 
+    text: isCorrect 
+      ? `🎉 猜对了！答案就是「${game.answer}」！` 
+      : `❌ 猜错了，「${guess}」不对哦～ 再想想吧！` 
+  }]
+});
   }
   
   return reply.code(400).send({ 
