@@ -1946,6 +1946,111 @@ app.post("/api/draw/submit-user", async function(request, reply) {
   saveDrawGame({ answer: null, aliases: [], strokes, drawing_svg: drawingSvg, ascii_grid: asciiGrid, created_at: new Date().toISOString(), artist: "user", guesses: [], revealed: false });
   return { ok: true, message: "画作已提交！" };
 });
+// === 一人画一笔 ===
+const TOGETHER_FILE = path.join(__dirname, "draw_together.json");
+function loadTog() { try { return JSON.parse(fs.readFileSync(TOGETHER_FILE,"utf-8")); } catch { return null; } }
+function saveTog(d) { fs.writeFileSync(TOGETHER_FILE, JSON.stringify(d,null,2)); }
+
+const AI_SHAPES = [
+  {id:"circle",name:"圆形",pts:[[500,200],[570,220],[620,270],[630,350],[620,430],[570,480],[500,500],[430,480],[380,430],[370,350],[380,270],[430,220],[500,200]],color:"#4f454b",w:6},
+  {id:"triangle",name:"三角形",pts:[[500,150],[350,480],[650,480],[500,150]],color:"#4f454b",w:6},
+  {id:"line",name:"直线",pts:[[200,350],[800,350]],color:"#4f454b",w:5},
+  {id:"wave",name:"波浪线",pts:[[200,350],[300,300],[400,400],[500,300],[600,400],[700,300],[800,350]],color:"#4f454b",w:5},
+  {id:"square",name:"方形",pts:[[350,200],[650,200],[650,500],[350,500],[350,200]],color:"#4f454b",w:6},
+  {id:"star",name:"星形",pts:[[500,170],[570,280],[690,280],[590,360],[630,480],[500,400],[370,480],[410,360],[310,280],[430,280],[500,170]],color:"#4f454b",w:5},
+  {id:"heart",name:"心形",pts:[[500,420],[560,360],[620,360],[660,400],[660,460],[500,580],[340,460],[340,400],[380,360],[440,360],[500,420]],color:"#e8877c",w:6},
+  {id:"s_curve",name:"S形",pts:[[300,200],[350,250],[400,300],[450,250],[500,200],[550,250],[600,300],[650,250],[700,200]],color:"#4f454b",w:5},
+  {id:"arrow",name:"箭头",pts:[[250,350],[700,350],[650,300],[700,350],[650,400]],color:"#4f454b",w:5},
+  {id:"dot",name:"短划",pts:[[450,350],[550,350]],color:"#4f454b",w:8},
+];
+
+app.get("/api/draw/together/new", async function(request, reply) {
+  saveTog({players:["AI","你"],current:0,strokes:[],phase:"drawing",rounds:5,created_at:new Date().toISOString()});
+  reply.redirect("/api/draw/together");
+});
+
+app.get("/api/draw/together/status", async function(request, reply) {
+  const g = loadTog();
+  if (!g) return {ok:false,message:"还没开局"};
+  return {ok:true,current_player:g.players[g.current],ai:g.strokes.filter(s=>s.p==="AI").length,
+    you:g.strokes.filter(s=>s.p==="你").length,rounds:g.rounds,phase:g.phase,
+    svg:strokesToSvg(g.strokes.map(s=>({points:s.pts,color:s.color||"#4f454b",width:s.w||7})))};
+});
+
+app.get("/api/draw/together/ai-draw", async function(request, reply) {
+  const g = loadTog();
+  if (!g||g.current!==0||g.phase!=="drawing") return reply.redirect("/api/draw/together");
+  const aiN = g.strokes.filter(s=>s.p==="AI").length;
+  if (aiN>=g.rounds) return reply.redirect("/api/draw/together");
+  let shape = AI_SHAPES.find(s=>s.id===request.query.shape);
+  if (!shape) shape = AI_SHAPES[aiN%AI_SHAPES.length];
+  g.strokes.push({p:"AI",pts:shape.pts,color:shape.color,w:shape.w});
+  const uN = g.strokes.filter(s=>s.p==="你").length;
+  g.current = (aiN+1>=g.rounds&&uN>=g.rounds) ? -1 : 1;
+  if (g.current===-1) g.phase="finished";
+  saveTog(g);
+  reply.redirect("/api/draw/together");
+});
+
+app.post("/api/draw/together/stroke", async function(request, reply) {
+  const {points}=request.body||{}; const g=loadTog();
+  if(!g||g.current!==1||g.phase!=="drawing") return reply.code(400).send({error:"还没轮到你"});
+  if(g.strokes.filter(s=>s.p==="你").length>=g.rounds) return reply.code(400).send({error:"画够了"});
+  if(!points||points.length<2) return reply.code(400).send({error:"至少画两个点"});
+  g.strokes.push({p:"你",pts:points,color:"#d8a0ad",w:7});
+  const aiN=g.strokes.filter(s=>s.p==="AI").length, uN=g.strokes.filter(s=>s.p==="你").length;
+  if(aiN>=g.rounds&&uN>=g.rounds){g.phase="finished";g.current=-1}
+  else g.current=0;
+  saveTog(g);
+  return {ok:true,finished:g.phase==="finished"};
+});
+
+app.get("/api/draw/together", async function(request, reply) {
+  const g=loadTog();
+  const has=!!g, phase=g?.phase, cur=g?.players[g?.current], aiN=g?.strokes.filter(s=>s.p==="AI").length||0, uN=g?.strokes.filter(s=>s.p==="你").length||0, r=g?.rounds||5;
+  const svg = has ? strokesToSvg(g.strokes.map(s=>({points:s.pts,color:s.color||"#4f454b",width:s.w||7}))) : "";
+  const btns = AI_SHAPES.map(s=>`<button class="shape-btn" onclick="fetch('/api/draw/together/ai-draw?shape=${s.id}').then(()=>location.reload())">${s.name}</button>`).join("");
+  reply.type("text/html; charset=utf-8").send(`<!DOCTYPE html>
+<html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"><title>一人画一笔</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#f8f0f3;display:flex;justify-content:center;padding:20px;font-family:-apple-system,sans-serif}.container{max-width:700px;width:100%;text-align:center}.status{color:#8a4a58;margin:12px 0;font-size:18px;font-weight:600}.sub{color:#a88a92;font-size:14px;margin-bottom:10px}.canvas-wrap{border:2px solid #e0c8d0;border-radius:12px;overflow:hidden;background:white;touch-action:none;margin-bottom:12px}canvas,svg{display:block;width:100%;height:auto}#drawCanvas{background:#fffafc;touch-action:none}.toolbar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}.shape-btn{padding:10px 18px;border:none;border-radius:10px;background:#e8d0d8;color:#7a5058;font-size:14px;cursor:pointer}.shape-btn:hover{background:#d8b8c4}.btn-submit{padding:12px 28px;border:none;border-radius:10px;background:#d8a0ad;color:white;font-size:16px;cursor:pointer}.btn-submit:hover{background:#c8909d}.msg{color:#a88a92;font-size:14px;margin-top:10px}.hint{color:#c8909d;font-size:15px;margin:10px 0}.empty{color:#a88a92;padding:60px 20px;font-size:16px}</style></head>
+<body><div class="container">
+${!has?`<div class="empty">还没开局呢<br><br><button class="btn-submit" onclick="location.href='/api/draw/together/new'">开一局</button></div>`:
+phase==="finished"?`
+<h2 class="status">合作完成！🎉</h2>
+<div class="sub">AI画了${aiN}笔，你画了${uN}笔</div>
+<div class="canvas-wrap"><svg viewBox="0 0 1000 700" style="background:#fffafc">${svg.replace(/<svg[^>]*>/,"").replace(/<\/svg>/,"")}</svg></div>
+<div class="msg">看看我们画了什么吧😊</div>
+<div class="toolbar" style="margin-top:16px"><button class="btn-submit" onclick="location.href='/api/draw/together/new'">再来一局</button></div>`:
+cur==="AI"?`
+<h2 class="status">轮到AI画～</h2>
+<div class="sub">第${aiN+1}/${r}笔 · 选一个形状让AI画</div>
+<div class="canvas-wrap"><svg viewBox="0 0 1000 700" style="background:#fffafc">${svg.replace(/<svg[^>]*>/,"").replace(/<\/svg>/,"")}</svg></div>
+<div class="toolbar">${btns}</div>
+<div class="hint">选一个形状，AI画上去后就轮到你啦</div>`:`
+<h2 class="status">轮到你了✏️</h2>
+<div class="sub">第${uN+1}/${r}笔 · 在画布上画一笔</div>
+<canvas id="c" width="1000" height="700" class="canvas-wrap" style="border:2px solid #e0c8d0;border-radius:12px;background:#fffafc;width:100%;touch-action:none"></canvas>
+<div class="toolbar"><button class="btn-submit" onclick="submitStroke()">交笔</button></div>
+<div class="hint" id="hint">画一笔然后点交笔～</div>
+<script>
+const c=document.getElementById("c"),ctx=c.getContext("2d");
+ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#d8a0ad";ctx.lineWidth=7;
+let drawing=false,pts=[];
+function gp(e){const r=c.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return{x:(t.clientX-r.left)*(c.width/r.width),y:(t.clientY-r.top)*(c.height/r.height)}}
+c.addEventListener("touchstart",function(e){e.preventDefault();drawing=true;pts=[];const p=gp(e);pts.push([p.x,p.y]);ctx.beginPath();ctx.moveTo(p.x,p.y)},{passive:false});
+c.addEventListener("touchmove",function(e){e.preventDefault();if(!drawing)return;const p=gp(e);pts.push([p.x,p.y]);ctx.lineTo(p.x,p.y);ctx.stroke()},{passive:false});
+c.addEventListener("touchend",function(e){e.preventDefault();drawing=false});
+c.addEventListener("mousedown",function(e){drawing=true;pts=[];const p=gp(e);pts.push([p.x,p.y]);ctx.beginPath();ctx.moveTo(p.x,p.y)});
+c.addEventListener("mousemove",function(e){if(!drawing)return;const p=gp(e);pts.push([p.x,p.y]);ctx.lineTo(p.x,p.y);ctx.stroke()});
+c.addEventListener("mouseup",function(){drawing=false});
+async function submitStroke(){if(pts.length<2){alert("至少画一小笔～");return}
+document.getElementById("hint").textContent="提交中...";
+const r=await fetch("/api/draw/together/stroke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({points:pts})});
+const d=await r.json();if(d.ok){if(d.finished)location.reload();else setTimeout(()=>location.reload(),800)}else{document.getElementById("hint").textContent=d.error}}
+</script>`}
+</div></body></html>`);
+});
+
 // === 定时情话推送 ===
 const BARK_KEY = "Y6g2XD6UwFFuZMbgxcS5RA";
 const PUSH_HOURS = [10, 13, 16, 19, 22, 1];
