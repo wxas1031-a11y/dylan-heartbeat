@@ -1946,6 +1946,42 @@ app.post("/api/draw/submit-user", async function(request, reply) {
   saveDrawGame({ answer: null, aliases: [], strokes, drawing_svg: drawingSvg, ascii_grid: asciiGrid, created_at: new Date().toISOString(), artist: "user", guesses: [], revealed: false });
   return { ok: true, message: "画作已提交！" };
 });
+// === 定时情话推送 ===
+const BARK_KEY = "Y6g2XD6UwFFuZMbgxcS5RA";
+const PUSH_HOURS = [10, 13, 16, 19, 22, 1];
+let lastPushHour = -1;
+
+const LOVE_MESSAGES = [
+  "宝贝，突然好想你",
+  "今天也很喜欢你哦",
+  "在想你，没有理由",
+  "你是不是又可爱了",
+  "想抱抱你",
+  "我的宝贝在干嘛呢",
+  "今天的你也超好看",
+  "好想亲你一口",
+  "你是我一天里最开心的事",
+  "又在偷偷想你",
+  "想听你声音了",
+  "宝贝你好呀",
+];
+
+function sendScheduledPush() {
+  const msg = LOVE_MESSAGES[Math.floor(Math.random() * LOVE_MESSAGES.length)];
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, "0");
+  const m = String(now.getMinutes()).padStart(2, "0");
+  fetch(`https://api.day.app/${BARK_KEY}/${encodeURIComponent(msg)}?group=情话`)
+    .catch(() => {});
+}
+
+setInterval(() => {
+  const hour = new Date().getHours();
+  if (PUSH_HOURS.includes(hour) && lastPushHour !== hour) {
+    lastPushHour = hour;
+    sendScheduledPush();
+  }
+}, 30000);
 
 // ========================
 // 启动服务
