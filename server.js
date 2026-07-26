@@ -1965,17 +1965,6 @@ setInterval(() => {
 }, 30000);
 
 // ========================
-// 启动服务
-// ========================
-app.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
-  if (err) {
-    console.error(err);
-    process.exit(1);
-  }
-  console.log(`✅ Gateway 运行在 ${address}`);
-});
-
-// ========================
 // MCP 协议入口（你画我猜）
 // ========================
 app.post("/mcp/draw", async (req, reply) => {
@@ -2072,3 +2061,15 @@ app.post("/mcp/draw", async (req, reply) => {
 });
 
 console.log("✅ MCP 你画我猜工具已加载");
+
+// ========================
+// 启动服务
+// ========================
+app.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
+  if (err) {
+    console.error(err);
+    process.exit(1);
+  }
+  console.log(`✅ Gateway 运行在 ${address}`);
+});
+
