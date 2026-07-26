@@ -495,19 +495,7 @@ function readRestartCommand() {
 // ========================
 // 安全：放行 /admin，其他仅本地/局域网
 // ========================
-/*
-app.addHook("onRequest", (req, reply, done) => {
-  if (req.url.startsWith("/admin")) return done();
-  if (req.url.startsWith("/api/")) return done ();
-  // 批注 2026-07-15：公网部署常经过反代，真实公网请求可能在 Node 侧显示为 127/10 网段；
-  // 所以 ALLOW_PUBLIC_API=true 后必须先验 /v1 的网关 key，避免被云平台内网 IP 绕过。
-  
-  const ip = req.ip || req.connection.remoteAddress;
-  const isTrustedNetwork = ip === "127.0.0.1" || ip === "::1" || ip === "localhost" || /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(ip);
-  if (isTrustedNetwork) return done();
-  reply.code(403).send("Forbidden");
-});
-*/
+
 
 // ========================
 // Models
