@@ -495,6 +495,7 @@ function readRestartCommand() {
 // ========================
 // 安全：放行 /admin，其他仅本地/局域网
 // ========================
+/*
 app.addHook("onRequest", (req, reply, done) => {
   if (req.url.startsWith("/admin")) return done();
   if (req.url.startsWith("/api/")) return done ();
@@ -520,6 +521,7 @@ app.addHook("onRequest", (req, reply, done) => {
   if (isTrustedNetwork) return done();
   reply.code(403).send("Forbidden");
 });
+*/
 
 // ========================
 // Models
