@@ -1967,7 +1967,13 @@ setInterval(() => {
 // ========================
 // MCP 协议入口（你画我猜）
 // ========================
-app.all("/mcp/draw", async (req, reply) => {
+// GET 请求：让浏览器访问显示提示信息
+app.get("/mcp/draw", async (req, reply) => {
+  reply.send({ message: "MCP 服务已启动，请使用 POST 请求调用工具" });
+});
+
+// POST 请求：真正的 MCP 逻辑
+app.post("/mcp/draw", async (req, reply) => {
   const { tool, params } = req.body || {};
   
   if (tool === "draw_start") {
@@ -2045,15 +2051,14 @@ app.all("/mcp/draw", async (req, reply) => {
     if (isCorrect) game.revealed = true;
     saveDrawGame(game);
     
-  
-return reply.send({
-  content: [{ 
-    type: "text", 
-    text: isCorrect 
-      ? `🎉 猜对了！答案就是「${game.answer}」！` 
-      : `❌ 猜错了，「${guess}」不对哦～ 再想想吧！` 
-  }]
-});
+    return reply.send({
+      content: [{ 
+        type: "text", 
+        text: isCorrect 
+          ? `🎉 猜对了！答案就是「${game.answer}」！` 
+          : `❌ 猜错了，「${guess}」不对哦～ 再想想吧！` 
+      }]
+    });
   }
   
   return reply.code(400).send({ 
